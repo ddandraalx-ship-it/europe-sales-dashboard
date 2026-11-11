@@ -17,16 +17,16 @@
 
             <div class="text-right">
                 <p class="text-sm font-semibold text-slate-700">
-                    Live workspace
+                    Europe workspace
                 </p>
 
                 <p class="text-xs text-slate-400">
-                    Europe · Sales data
+                    Retail · Sales data
                 </p>
             </div>
 
-            <div class="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-sm">
-                EU
+            <div class="w-10 h-10 flex items-center justify-center" title="European Union">
+                <img src="{{ asset('images/eu-flag.svg') }}" alt="Bendera Uni Eropa" class="w-10 h-10">
             </div>
 
         </div>

@@ -4,23 +4,7 @@
     <div class="sidebar-brand mb-10">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#123d75;box-shadow:0 6px 20px rgba(18,61,117,.28)">
-                <svg viewBox="0 0 48 48" width="31" height="31" role="img" aria-label="Bendera Uni Eropa">
-                    <circle cx="24" cy="24" r="22" fill="#123d75"/>
-                    <g fill="#ffd84d">
-                        <circle cx="24" cy="8.5" r="1.45"/>
-                        <circle cx="31.75" cy="10.58" r="1.45"/>
-                        <circle cx="37.42" cy="16.25" r="1.45"/>
-                        <circle cx="39.5" cy="24" r="1.45"/>
-                        <circle cx="37.42" cy="31.75" r="1.45"/>
-                        <circle cx="31.75" cy="37.42" r="1.45"/>
-                        <circle cx="24" cy="39.5" r="1.45"/>
-                        <circle cx="16.25" cy="37.42" r="1.45"/>
-                        <circle cx="10.58" cy="31.75" r="1.45"/>
-                        <circle cx="8.5" cy="24" r="1.45"/>
-                        <circle cx="10.58" cy="16.25" r="1.45"/>
-                        <circle cx="16.25" cy="10.58" r="1.45"/>
-                    </g>
-                </svg>
+                <img src="{{ asset('images/eu-flag.svg') }}" width="31" height="31" alt="Bendera Uni Eropa">
             </div>
 
             <div>
@@ -59,6 +43,12 @@
             <span>What-If Analysis</span>
         </a>
 
+        <a href="{{ route('etl') }}"
+           class="menu-link {{ request()->routeIs('etl*') ? 'active' : '' }}">
+            <span>⌘</span>
+            <span>ETL Management</span>
+        </a>
+
     </nav>
 
     <div class="sidebar-source">
@@ -78,5 +68,10 @@
             MySQL · Europe
         </p>
     </div>
+
+    <form method="POST" action="{{ route('logout') }}" class="sidebar-logout">
+        @csrf
+        <button type="submit" class="menu-link">↪ <span>Sign out</span></button>
+    </form>
 
 </aside>
