@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\SalesTransaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
@@ -17,11 +18,18 @@ class ExampleTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        $response->assertOk()
+            ->assertSee('Lihat deskripsi fitur website')
+            ->assertSee('Dashboard penjualan')
+            ->assertSee('Analisis Drill-Down')
+            ->assertSee('Simulasi What-If')
+            ->assertSee('ETL Management');
     }
 
     public function test_dashboard_displays_sales_from_the_database(): void
     {
+        $this->withSession(['admin_authenticated' => true]);
+
         SalesTransaction::create([
             'region' => 'Europe',
             'country' => 'France',
@@ -39,7 +47,7 @@ class ExampleTest extends TestCase
             'total_profit' => 80,
         ]);
 
-        $this->get('/?country=France')
+        $this->get('/dashboard?country=France')
             ->assertOk()
             ->assertSee('France')
             ->assertSee('$200.00')
@@ -48,6 +56,8 @@ class ExampleTest extends TestCase
 
     public function test_what_if_simulation_uses_database_totals_and_requested_sliders(): void
     {
+        $this->withSession(['admin_authenticated' => true]);
+
         SalesTransaction::create([
             'region' => 'Europe',
             'country' => 'France',
@@ -75,6 +85,8 @@ class ExampleTest extends TestCase
 
     public function test_drilldown_levels_can_be_opened_directly(): void
     {
+        $this->withSession(['admin_authenticated' => true]);
+
         SalesTransaction::create([
             'region' => 'Europe',
             'country' => 'France',
@@ -98,5 +110,70 @@ class ExampleTest extends TestCase
                 ->assertSee("LEVEL {$level}")
                 ->assertSee('href="', false);
         }
+    }
+
+    public function test_login_opens_the_workspace_gateway_or_etl_directly(): void
+    {
+        $this->post('/login', [
+            'username' => 'admin',
+            'password' => 'admin',
+            'destination' => 'gateway',
+        ])->assertRedirect('/access');
+
+        $this->post('/logout');
+
+        $this->post('/login', [
+            'username' => 'admin',
+            'password' => 'admin',
+            'destination' => 'etl',
+        ])->assertRedirect('/etl');
+    }
+
+    public function test_protected_pages_require_admin_access(): void
+    {
+        $this->get('/etl')->assertRedirect('/');
+        $this->get('/dashboard')->assertRedirect('/');
+    }
+
+    public function test_each_workspace_page_uses_its_own_background_image(): void
+    {
+        $this->withSession(['admin_authenticated' => true]);
+
+        $backgrounds = [
+            '/access' => 'europe-unity-mural.png',
+            '/dashboard' => 'europe-blue-brush.png',
+            '/drilldown' => 'europe-stars-abstract.png',
+            '/what-if' => 'europe-sales-forecast.svg',
+            '/etl' => 'europe-retail-logistics.svg',
+        ];
+
+        foreach ($backgrounds as $path => $image) {
+            $this->get($path)->assertOk()->assertSee($image);
+        }
+
+        $this->flushSession();
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('europe-flag-landscape.png');
+    }
+
+    public function test_etl_upload_imports_a_valid_sales_csv(): void
+    {
+        $this->withSession(['admin_authenticated' => true]);
+
+        $csv = implode("\n", [
+            'region,country,item_type,sales_channel,order_priority,order_date,order_id,ship_date,units_sold,unit_price,unit_cost,total_revenue,total_cost,total_profit',
+            'Europe,France,Cosmetics,Online,M,2026-01-15,100000099,2026-01-20,10,20,12,200,120,80',
+        ]);
+
+        $this->post('/etl/import', [
+            'file' => UploadedFile::fake()->createWithContent('sales.csv', $csv),
+        ])->assertRedirect('/etl')->assertSessionHas('status');
+
+        $this->assertDatabaseHas('sales_transactions', [
+            'order_id' => 100000099,
+            'country' => 'France',
+        ]);
     }
 }

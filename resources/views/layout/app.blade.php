@@ -9,7 +9,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -17,9 +17,18 @@
         if (window.Chart) {
             Chart.defaults.color = '#b3c2bb';
             Chart.defaults.borderColor = 'rgba(145, 180, 169, 0.16)';
-            Chart.defaults.font.family = 'Poppins, ui-sans-serif, system-ui, sans-serif';
+            Chart.defaults.font.family = '"DM Sans", ui-sans-serif, system-ui, sans-serif';
         }
     </script>
+    @php
+        $pageBackground = match (true) {
+            request()->routeIs('dashboard') => 'images/europe-blue-brush.png',
+            request()->routeIs('drilldown') => 'images/europe-stars-abstract.png',
+            request()->routeIs('whatif') => 'images/europe-sales-forecast.svg',
+            request()->routeIs('etl*') => 'images/europe-retail-logistics.svg',
+            default => 'images/europe-unity-mural.png',
+        };
+    @endphp
     <style>
         * {
             box-sizing: border-box;
@@ -27,7 +36,7 @@
 
         :root {
             color-scheme: dark;
-            --page: #0c1116;
+            --page: #091116;
             --surface: rgba(21, 29, 34, 0.78);
             --surface-raised: rgba(28, 40, 43, 0.9);
             --border: rgba(145, 180, 169, 0.16);
@@ -44,15 +53,29 @@
 
         body {
             margin: 0;
-            background:
-                radial-gradient(ellipse at 82% 0%, rgba(23, 108, 90, 0.19), transparent 36%),
-                radial-gradient(ellipse at 6% 44%, rgba(58, 73, 113, 0.13), transparent 35%),
-                var(--page);
+            position: relative;
+            background: var(--page);
             color: var(--text);
-            font-family: Poppins, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        body::before {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 0;
+            width: min(58vw, 920px);
+            background: linear-gradient(90deg, var(--page) 0%, rgba(9, 17, 22, 0.62) 34%, rgba(9, 17, 22, 0.55)),
+                url('{{ asset($pageBackground) }}') center 42% / cover no-repeat;
+            opacity: 0.16;
+            pointer-events: none;
+            content: "";
         }
 
         .app-container {
+            position: relative;
+            z-index: 1;
             flex-direction: column;
             align-items: stretch;
         }
@@ -181,6 +204,7 @@
         }
 
         .page-title {
+            font-family: Manrope, "DM Sans", sans-serif;
             font-size: 26px;
             font-weight: 700;
             color: #f2f7f4;
@@ -518,6 +542,11 @@
         }
 
         @media (max-width: 768px) {
+            body::before {
+                width: 100%;
+                opacity: 0.09;
+            }
+
             .sidebar {
                 width: 100%;
                 min-height: auto;
