@@ -14,7 +14,7 @@
     <div class="card mb-5 etl-success" role="status">{{ session('status') }}</div>
 @endif
 @if ($errors->any())
-    <div class="card mb-5 etl-error" role="alert">{{ $errors->first('file') ?? $errors->first() }}</div>
+    <div class="card mb-5 etl-error" role="alert">{{ $errors->first() }}</div>
 @endif
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
@@ -58,6 +58,70 @@
         </div>
     </section>
 </div>
+
+<section class="card mt-5" id="manage-transactions">
+    <div class="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <h2 class="font-bold text-slate-800">Manage transactions</h2>
+            <p class="text-xs text-slate-400 mt-1">Tambah, perbarui, atau hapus baris transaksi. Semua perubahan harus ditinjau dan dikonfirmasi sebelum tersimpan.</p>
+        </div>
+        @if ($canUndo)
+            <form method="POST" action="{{ route('etl.undo') }}" onsubmit="return confirm('Kembalikan perubahan ETL terakhir?')">
+                @csrf
+                <button class="btn-secondary" type="submit">↶ Undo last change</button>
+            </form>
+        @endif
+    </div>
+
+    <details class="etl-add-panel" {{ $errors->any() ? 'open' : '' }}>
+        <summary>Add a transaction</summary>
+        <form class="mt-4" method="POST" action="{{ route('etl.transactions.create-preview') }}">
+            @csrf
+            @include('partials.etl-transaction-fields', ['transaction' => null])
+            <button class="btn-primary mt-5" type="submit">Review transaction <span>→</span></button>
+        </form>
+    </details>
+
+    <div class="mt-6 mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold text-slate-800">Loaded records</h3>
+        <span class="text-xs text-slate-400">{{ number_format($transactions->total()) }} transactions · 10 per page</span>
+    </div>
+    @if ($transactions->isEmpty())
+        <p class="rounded-lg border border-slate-700 p-5 text-sm text-slate-400">Belum ada transaksi. Tambahkan baris di atas atau unggah file data.</p>
+    @else
+        <div class="etl-table-wrap">
+            <table class="etl-table">
+                <thead>
+                    <tr>
+                        @foreach (array_keys($fieldLabels) as $field)
+                            <th>{{ $fieldLabels[$field] }}</th>
+                        @endforeach
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($transactions as $transaction)
+                        <tr>
+                            @foreach (array_keys($fieldLabels) as $field)
+                                <td>{{ $transaction->getRawOriginal($field) }}</td>
+                            @endforeach
+                            <td>
+                                <div class="etl-row-actions">
+                                    <a class="btn-secondary" href="{{ route('etl.transactions.edit', $transaction) }}">Edit</a>
+                                    <form method="POST" action="{{ route('etl.transactions.delete-preview', $transaction) }}">
+                                        @csrf
+                                        <button class="etl-delete-button" type="submit">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-5">{{ $transactions->links() }}</div>
+    @endif
+</section>
 @endsection
 
 @push('styles')
@@ -91,6 +155,16 @@
 .fx-inputs input{width:78px;padding:7px 8px;border:1px solid rgba(145,180,169,.2);border-radius:7px;background:#101b1e;color:#eef6f2}
 .fx-inputs output{color:#a4e7c2;font-weight:700}
 .fx-box>small{display:block;margin-top:9px;color:#80958c;font-size:9px}
+.etl-add-panel{padding:14px;border:1px solid rgba(145,180,169,.14);border-radius:10px;background:rgba(7,15,18,.2)}
+.etl-add-panel summary{color:#9ce4bf;font-size:13px;font-weight:600;cursor:pointer}
+.etl-table-wrap{width:100%;overflow-x:auto;border:1px solid rgba(145,180,169,.13);border-radius:10px}
+.etl-table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:11px}
+.etl-table th{padding:11px 12px;background:rgba(44,64,62,.52);color:#bed0c8;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.etl-table td{padding:10px 12px;border-top:1px solid rgba(145,180,169,.1);color:#dbe7e0}
+.etl-row-actions{display:flex;align-items:center;gap:7px}
+.etl-row-actions .btn-secondary,.etl-delete-button{padding:6px 9px;font-size:10px}
+.etl-delete-button{border:1px solid rgba(255,130,145,.28);border-radius:7px;background:rgba(116,37,48,.18);color:#ff9aa6;cursor:pointer}
+.etl-delete-button:hover{background:rgba(116,37,48,.34)}
 </style>
 @endpush
 

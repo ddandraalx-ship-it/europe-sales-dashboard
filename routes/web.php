@@ -33,4 +33,28 @@ Route::middleware('admin.auth')->group(function () {
 
     Route::post('/etl/import', [EtlController::class, 'import'])
         ->name('etl.import');
+
+    Route::get('/etl/transactions/{transaction}/edit', [EtlController::class, 'edit'])
+        ->name('etl.transactions.edit');
+
+    Route::post('/etl/transactions/preview', [EtlController::class, 'previewCreate'])
+        ->name('etl.transactions.create-preview');
+
+    Route::post('/etl/transactions/{transaction}/preview-update', [EtlController::class, 'previewUpdate'])
+        ->name('etl.transactions.update-preview');
+
+    Route::post('/etl/transactions/{transaction}/preview-delete', [EtlController::class, 'previewDelete'])
+        ->name('etl.transactions.delete-preview');
+
+    Route::get('/etl/confirm', [EtlController::class, 'confirm'])
+        ->name('etl.confirm');
+
+    Route::post('/etl/confirm', [EtlController::class, 'applyChange'])
+        ->name('etl.confirm.apply');
+
+    Route::post('/etl/cancel', [EtlController::class, 'cancelChange'])
+        ->name('etl.cancel');
+
+    Route::post('/etl/undo', [EtlController::class, 'undo'])
+        ->name('etl.undo');
 });
