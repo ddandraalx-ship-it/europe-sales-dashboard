@@ -175,5 +175,105 @@ class ExampleTest extends TestCase
             'order_id' => 100000099,
             'country' => 'France',
         ]);
+
+        $this->post('/etl/undo')
+            ->assertRedirect('/etl')
+            ->assertSessionHas('status');
+
+        $this->assertDatabaseMissing('sales_transactions', [
+            'order_id' => 100000099,
+        ]);
+    }
+
+    public function test_etl_crud_requires_a_second_confirmation_and_update_can_be_undone(): void
+    {
+        $this->withSession(['admin_authenticated' => true]);
+        $this->get('/etl')
+            ->assertOk()
+            ->assertSee('Manage transactions')
+            ->assertSee('Add a transaction');
+
+        $transaction = [
+            'region' => 'Europe',
+            'country' => 'France',
+            'item_type' => 'Cosmetics',
+            'sales_channel' => 'Online',
+            'order_priority' => 'M',
+            'order_date' => '2026-01-15',
+            'order_id' => 100000098,
+            'ship_date' => '2026-01-20',
+            'units_sold' => 10,
+            'unit_price' => 20,
+            'unit_cost' => 12,
+            'total_revenue' => 200,
+            'total_cost' => 120,
+            'total_profit' => 80,
+        ];
+
+        $this->post('/etl/transactions/preview', $transaction)
+            ->assertRedirect('/etl/confirm');
+        $this->assertDatabaseMissing('sales_transactions', ['order_id' => 100000098]);
+
+        $token = $this->app['session.store']->get('etl_pending_change')['token'];
+        $this->post('/etl/confirm', ['token' => $token])
+            ->assertSessionHasErrors('confirmation');
+        $this->assertDatabaseMissing('sales_transactions', ['order_id' => 100000098]);
+
+        $this->post('/etl/cancel')->assertRedirect('/etl');
+        $this->assertNull($this->app['session.store']->get('etl_pending_change'));
+
+        $this->post('/etl/transactions/preview', $transaction)
+            ->assertRedirect('/etl/confirm');
+        $token = $this->app['session.store']->get('etl_pending_change')['token'];
+        $this->post('/etl/confirm', [
+            'token' => $token,
+            'confirmation' => '1',
+        ])->assertRedirect('/etl');
+        $this->assertDatabaseHas('sales_transactions', [
+            'order_id' => 100000098,
+            'country' => 'France',
+        ]);
+
+        $transactionId = SalesTransaction::where('order_id', 100000098)->value('id');
+        $transaction['country'] = 'Germany';
+        $this->post("/etl/transactions/{$transactionId}/preview-update", $transaction)
+            ->assertRedirect('/etl/confirm');
+        $this->assertDatabaseHas('sales_transactions', [
+            'order_id' => 100000098,
+            'country' => 'France',
+        ]);
+
+        $token = $this->app['session.store']->get('etl_pending_change')['token'];
+        $this->post('/etl/confirm', [
+            'token' => $token,
+            'confirmation' => '1',
+        ])->assertRedirect('/etl');
+        $this->assertDatabaseHas('sales_transactions', [
+            'order_id' => 100000098,
+            'country' => 'Germany',
+        ]);
+
+        $this->post('/etl/undo')->assertRedirect('/etl');
+        $this->assertDatabaseHas('sales_transactions', [
+            'order_id' => 100000098,
+            'country' => 'France',
+        ]);
+
+        $this->post("/etl/transactions/{$transactionId}/preview-delete")
+            ->assertRedirect('/etl/confirm');
+        $this->assertDatabaseHas('sales_transactions', ['order_id' => 100000098]);
+
+        $token = $this->app['session.store']->get('etl_pending_change')['token'];
+        $this->post('/etl/confirm', [
+            'token' => $token,
+            'confirmation' => '1',
+        ])->assertRedirect('/etl');
+        $this->assertDatabaseMissing('sales_transactions', ['order_id' => 100000098]);
+
+        $this->post('/etl/undo')->assertRedirect('/etl');
+        $this->assertDatabaseHas('sales_transactions', [
+            'order_id' => 100000098,
+            'country' => 'France',
+        ]);
     }
 }

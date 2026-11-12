@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\SalesDataUndo;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -157,6 +158,8 @@ class ImportSales extends Command
         $updateColumns = array_merge(array_values(array_diff(self::COLUMNS, ['order_id'])), ['updated_at']);
 
         DB::transaction(function () use ($rows, $updateColumns): void {
+            SalesDataUndo::capture();
+
             if ($this->option('replace')) {
                 DB::table('sales_transactions')->delete();
             }
