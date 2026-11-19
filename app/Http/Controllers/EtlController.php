@@ -7,9 +7,9 @@ use App\Services\SalesDataUndo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Str;
 
 class EtlController extends Controller
 {
@@ -66,6 +66,11 @@ class EtlController extends Controller
         $validated = $request->validate([
             'file' => ['required', 'file', 'mimes:csv,tsv,txt', 'max:10240'],
             'replace' => ['nullable', 'boolean'],
+        ], [
+            'file.required' => 'Pilih file CSV atau TSV untuk diimpor.',
+            'file.file' => 'File yang dipilih tidak valid.',
+            'file.mimes' => 'Format tidak didukung. Gunakan file CSV atau TSV.',
+            'file.max' => 'Ukuran file maksimal 10 MB.',
         ]);
 
         $arguments = [
@@ -81,6 +86,28 @@ class EtlController extends Controller
         }
 
         return redirect()->route('etl')->with('status', $output);
+    }
+
+    public function downloadTemplate()
+    {
+        $columns = self::FIELDS;
+        $examples = [
+            ['Europe', 'France', 'Cosmetics', 'Online', 'M', '2026-01-15', '100000001', '2026-01-20', '10', '20.00', '12.00', '200.00', '120.00', '80.00'],
+            ['Europe', 'Germany', 'Household', 'Offline', 'L', '2026-02-03', '100000002', '2026-02-08', '5', '35.50', '21.30', '177.50', '106.50', '71.00'],
+        ];
+
+        return response()->streamDownload(static function () use ($columns, $examples): void {
+            $output = fopen('php://output', 'w');
+            fputcsv($output, $columns);
+
+            foreach ($examples as $example) {
+                fputcsv($output, $example);
+            }
+
+            fclose($output);
+        }, 'europe-sales-template.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     public function edit(SalesTransaction $transaction)
@@ -230,10 +257,23 @@ class EtlController extends Controller
             'units_sold' => ['required', 'integer', 'min:0', 'max:4294967295'],
             'unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
             'unit_cost' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
-            'total_revenue' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
-            'total_cost' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
-            'total_profit' => ['required', 'numeric', 'decimal:0,2'],
+        ], [
+            '*.required' => 'Field ini wajib diisi.',
+            '*.string' => 'Harus diisi dengan format teks.',
+            '*.integer' => 'Harus diisi dengan angka bulat yang valid.',
+            '*.numeric' => 'Harus diisi dengan angka yang valid.',
+            '*.date_format' => 'Gunakan format tanggal YYYY-MM-DD.',
+            '*.min' => 'Nilai tidak boleh kurang dari :min.',
+            '*.unique' => 'Order ID tersebut sudah digunakan.',
         ]);
+
+        $quantity = (int) $validated['units_sold'];
+        $revenue = round($quantity * (float) $validated['unit_price'], 2);
+        $cost = round($quantity * (float) $validated['unit_cost'], 2);
+
+        $validated['total_revenue'] = number_format($revenue, 2, '.', '');
+        $validated['total_cost'] = number_format($cost, 2, '.', '');
+        $validated['total_profit'] = number_format($revenue - $cost, 2, '.', '');
 
         return array_intersect_key($validated, array_flip(self::FIELDS));
     }

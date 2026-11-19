@@ -15,7 +15,7 @@
 @endif
 
 <section class="card">
-    <form method="POST" action="{{ route('etl.transactions.update-preview', $transaction) }}">
+    <form class="etl-transaction-form" method="POST" action="{{ route('etl.transactions.update-preview', $transaction) }}" novalidate>
         @csrf
         @include('partials.etl-transaction-fields', ['transaction' => $transaction])
         <div class="mt-5 flex flex-wrap gap-3">

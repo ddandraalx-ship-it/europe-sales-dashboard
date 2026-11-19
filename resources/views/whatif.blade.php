@@ -179,7 +179,7 @@
 </div>
 
 @if($base->units > 0 && $base->priced_transactions == 0)
-    <div class="card mb-6" role="status" style="border-color:#765b2c;background:#211b12">
+    <div class="card whatif-data-warning mb-6" role="status">
         <h3 class="font-semibold text-amber-300">
             Data keuangan di database masih bernilai nol
         </h3>
@@ -310,6 +310,21 @@
 
 </div>
 
+<section class="card whatif-insight mb-6" id="whatif-insight" role="status" aria-live="polite">
+    <div class="whatif-insight-heading">
+        <span class="whatif-insight-icon" aria-hidden="true">✦</span>
+        <div>
+            <p class="whatif-insight-label">ANALISIS DINAMIS</p>
+            <h3 id="insight-title" class="font-bold">Analisis skenario</h3>
+        </div>
+    </div>
+    <p id="insight-narrative" class="text-sm leading-6 mt-4"></p>
+    <div class="whatif-recommendation">
+        <h4 class="font-semibold text-sm">Saran keputusan bisnis</h4>
+        <ul id="insight-recommendations" class="mt-2 space-y-2 text-sm leading-6"></ul>
+    </div>
+</section>
+
 {{-- COMPARISON TABLE --}}
 <div class="card mb-6">
 
@@ -426,6 +441,14 @@
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
+    const insightTitle = document.getElementById('insight-title');
+    const insightNarrative = document.getElementById('insight-narrative');
+    const insightRecommendations = document.getElementById('insight-recommendations');
+    const scope = [
+        @json(request('item_type')),
+        @json(request('country')),
+        @json(request('channel')),
+    ].filter(Boolean);
 
     const setText = (id, value) => {
         document.getElementById(id).textContent = value;
@@ -437,13 +460,83 @@
         element.classList.toggle('text-red-500', positiveIsGood ? change < 0 : change > 0);
     };
 
+    const updateInsight = (revenue, profit, margin, priceChange, unitsChange, costChange) => {
+        const profitDelta = profit - base.profit;
+        const profitGrowth = base.profit > 0 ? (profitDelta / base.profit) * 100 : 0;
+        const scopeName = scope.length ? scope.join(' · ') : 'kategori atau negara dengan profit terbaik';
+        let title = 'Skenario relatif stabil';
+        let narrative = '';
+        let recommendations = [];
+        let tone = 'neutral';
+
+        if (base.revenue <= 0) {
+            title = 'Belum ada baseline pendapatan';
+            narrative = 'Data aktual pada scope yang dipilih belum memiliki revenue, sehingga margin dan perubahan profit belum dapat dibandingkan secara andal.';
+            recommendations = ['Periksa filter negara, kategori, dan channel atau impor transaksi dengan nilai penjualan yang valid sebelum mengambil keputusan.'];
+            tone = 'warning';
+        } else if (margin < 10 || profit < 0) {
+            title = profit < 0 ? 'Peringatan: skenario merugi' : 'Peringatan: margin profit rendah';
+            narrative = `Margin skenario ${percent.format(margin)}%${profit < 0 ? ' dan profit berada di bawah nol' : ', di bawah ambang acuan 10%'}. ${priceChange < 0 ? 'Penurunan harga/kenaikan diskon' : 'Kombinasi parameter'} berisiko menggerus profitabilitas.`;
+            recommendations = [
+                priceChange < 0
+                    ? 'Tinjau kembali diskon dan uji batas harga minimum; arahkan promosi ke produk dengan margin lebih tinggi.'
+                    : 'Optimalkan harga jual dan negosiasikan biaya unit untuk memulihkan margin.',
+                'Uji bundling produk bernilai tambah, lalu pertahankan hanya penawaran yang menjaga margin minimal 10%.',
+            ];
+            tone = 'warning';
+        } else if (profitDelta > 0 && profitGrowth >= 10) {
+            title = 'Peluang pertumbuhan profit';
+            narrative = `Profit meningkat ${percent.format(profitGrowth)}% dibanding aktual dengan margin ${percent.format(margin)}%. ${unitsChange > 0 ? 'Kenaikan volume penjualan menjadi pendorong utama skenario.' : 'Perubahan parameter menghasilkan peningkatan profit yang signifikan.'}`;
+            recommendations = [
+                unitsChange > 0
+                    ? `Evaluasi penambahan stok dan kapasitas distribusi untuk ${scopeName}; gunakan penambahan bertahap berdasarkan sell-through aktual.`
+                    : `Prioritaskan pengujian skenario ini pada ${scopeName} sebelum diterapkan lebih luas.`,
+                costChange > 0
+                    ? 'Pantau kenaikan biaya unit dan tetapkan batas biaya agar keuntungan skenario tidak terkikis.'
+                    : 'Validasi ketersediaan stok dan pantau margin aktual setelah perubahan diterapkan.',
+            ];
+            tone = 'positive';
+        } else if (profitDelta > 0) {
+            title = 'Profit membaik secara moderat';
+            narrative = `Profit meningkat ${currency.format(profitDelta)} dibanding aktual dan margin berada di ${percent.format(margin)}%.`;
+            recommendations = [
+                `Jalankan uji terbatas pada ${scopeName} dan bandingkan hasil aktual dengan simulasi.`,
+                'Tinjau kombinasi harga, volume, dan biaya untuk mencari peningkatan profit yang lebih besar tanpa melewati batas risiko.',
+            ];
+            tone = 'positive';
+        } else {
+            title = 'Profit menurun dibanding aktual';
+            narrative = `Profit skenario turun ${currency.format(Math.abs(profitDelta))} dibanding aktual; margin menjadi ${percent.format(margin)}%.`;
+            recommendations = [
+                priceChange < 0
+                    ? 'Kurangi diskon atau batasi promosi pada produk yang masih memiliki ruang margin.'
+                    : 'Periksa penyebab kenaikan biaya atau penurunan unit, lalu uji kembali parameter secara bertahap.',
+                'Bandingkan dampak tiap perubahan secara terpisah sebelum menerapkannya ke seluruh pasar.',
+            ];
+            tone = 'warning';
+        }
+
+        if (priceChange < 0 && margin >= 10 && profitDelta >= 0) {
+            recommendations.push('Pastikan kenaikan volume dari promosi benar-benar menutup pengurangan margin per unit.');
+        }
+
+        insightTitle.textContent = title;
+        insightNarrative.textContent = narrative;
+        insightRecommendations.replaceChildren(...recommendations.map(recommendation => {
+            const item = document.createElement('li');
+            item.textContent = recommendation;
+            return item;
+        }));
+        document.getElementById('whatif-insight').dataset.tone = tone;
+    };
+
     const updateScenario = () => {
         const priceChange = Number(sliders.price.value) / 100;
         const unitsChange = Number(sliders.units.value) / 100;
         const costChange = Number(sliders.cost.value) / 100;
         const revenue = base.revenue * (1 + priceChange) * (1 + unitsChange);
         const cost = base.cost * (1 + costChange) * (1 + unitsChange);
-        const profit = revenue - cost;
+        const profit = base.profit + (revenue - base.revenue) - (cost - base.cost);
         const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
 
         setText('price-change-value', `${sliders.price.value}%`);
@@ -460,6 +553,7 @@
         setDelta('scenario-revenue-delta', revenue - base.revenue, true);
         setDelta('scenario-cost-delta', cost - base.cost, false);
         setDelta('scenario-profit-delta', profit - base.profit, true);
+        updateInsight(revenue, profit, margin, priceChange, unitsChange, costChange);
     };
 
     Object.values(sliders).forEach((slider) => slider.addEventListener('input', updateScenario));

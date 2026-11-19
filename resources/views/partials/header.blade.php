@@ -15,6 +15,19 @@
 
         <div class="flex items-center gap-3">
 
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light mode">
+                <span aria-hidden="true">☼</span>
+                <span id="theme-toggle-label">Light mode</span>
+            </button>
+
+            <label class="sr-only" for="language">Select language</label>
+            <select id="language" class="form-control language-select" aria-label="Select language">
+                <option value="id">ID · Indonesia</option>
+                <option value="en">EN · English</option>
+                <option value="de">DE · Deutsch</option>
+                <option value="fr">FR · Français</option>
+            </select>
+
             <div class="text-right">
                 <p class="text-sm font-semibold text-slate-700">
                     Europe workspace

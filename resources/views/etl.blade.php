@@ -27,9 +27,9 @@
     <section class="card xl:col-span-3">
         <div class="mb-5">
             <h2 class="font-bold text-slate-800">Load sales data</h2>
-            <p class="text-xs text-slate-400 mt-1">Upload a CSV or tab-separated file with the 14 expected sales columns.</p>
+            <p class="text-xs text-slate-400 mt-1">Upload CSV/TSV dengan header sesuai skema transaksi; file hanya diproses setelah seluruh baris lolos validasi.</p>
         </div>
-        <form method="POST" action="{{ route('etl.import') }}" enctype="multipart/form-data">
+        <form id="sales-import-form" method="POST" action="{{ route('etl.import') }}" enctype="multipart/form-data" novalidate>
             @csrf
             <label for="sales-file" class="upload-zone">
                 <span class="upload-icon">↑</span>
@@ -38,12 +38,28 @@
                 <input id="sales-file" name="file" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" required>
                 <span id="file-name" class="file-name">No file selected</span>
             </label>
+            @error('file')
+                <small class="etl-field-error upload-error" id="file-error" role="alert">{{ $message }}</small>
+            @else
+                <small class="etl-field-error upload-error" id="file-error" role="alert" aria-live="polite"></small>
+            @enderror
             <label class="replace-option">
                 <input type="checkbox" name="replace" value="1">
                 <span><strong>Replace existing data</strong><small>Clear current transactions only after the new file passes validation.</small></span>
             </label>
             <button class="btn-primary mt-5" type="submit">Validate &amp; load data <span>→</span></button>
         </form>
+        <div class="etl-template-guide">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3>Format data yang diwajibkan</h3>
+                    <p>Header harus mengikuti urutan berikut. Format tanggal <code>YYYY-MM-DD</code>; jumlah unit dan Order ID bilangan bulat; nilai harga/biaya angka hingga 2 desimal.</p>
+                </div>
+                <a class="btn-secondary" href="{{ route('etl.template') }}">Download Template Format</a>
+            </div>
+            <code class="etl-columns">region, country, item_type, sales_channel, order_priority, order_date, order_id, ship_date, units_sold, unit_price, unit_cost, total_revenue, total_cost, total_profit</code>
+            <p class="etl-template-note">Contoh: Europe · France · Cosmetics · Online · M · 2026-01-15 · 100000001 · 2026-01-20 · 10 · 20.00 · 12.00 · 200.00 · 120.00 · 80.00</p>
+        </div>
     </section>
 
     <section class="card xl:col-span-2">
@@ -75,7 +91,7 @@
 
     <details class="etl-add-panel" {{ $errors->any() ? 'open' : '' }}>
         <summary>Add a transaction</summary>
-        <form class="mt-4" method="POST" action="{{ route('etl.transactions.create-preview') }}">
+        <form class="etl-transaction-form mt-4" method="POST" action="{{ route('etl.transactions.create-preview') }}" novalidate>
             @csrf
             @include('partials.etl-transaction-fields', ['transaction' => null])
             <button class="btn-primary mt-5" type="submit">Review transaction <span>→</span></button>
@@ -128,6 +144,13 @@
 <style>
 .etl-success{border-color:rgba(86,214,160,.35);color:#9ce4bf;font-size:13px}
 .etl-error{border-color:rgba(255,130,145,.35);color:#ff9aa6;font-size:13px}
+.upload-error{display:block;margin-top:8px}
+.etl-template-guide{margin-top:19px;padding:15px;border:1px solid rgba(145,180,169,.13);border-radius:11px;background:rgba(7,15,18,.2)}
+.etl-template-guide h3{margin:0;color:#dce8e1;font-size:12px;font-weight:700}
+.etl-template-guide p{max-width:680px;margin:6px 0 0;color:#91a69c;font-size:10px;line-height:1.6}
+.etl-template-guide code{color:#a5e8c5}
+.etl-columns{display:block;margin-top:12px;overflow-wrap:anywhere;font-size:10px;line-height:1.8}
+.etl-template-guide .etl-template-note{max-width:none;margin-top:7px}
 .etl-metric{position:relative;min-height:148px}
 .etl-metric p{margin:16px 0 5px;color:#7e968c;font-size:10px;letter-spacing:.14em}
 .etl-metric strong{display:block;color:#e4eee8;font-size:14px}
@@ -171,11 +194,30 @@
 @push('scripts')
 <script>
 document.getElementById('sales-file').addEventListener('change', event => {
-    document.getElementById('file-name').textContent = event.target.files[0]?.name || 'No file selected';
+    const file = event.target.files[0];
+    const error = document.getElementById('file-error');
+    const validExtension = file && /\.(csv|tsv|txt)$/i.test(file.name);
+    const validSize = file && file.size <= 10 * 1024 * 1024;
+    document.getElementById('file-name').textContent = file ? file.name : 'No file selected';
+    error.textContent = file && !validExtension
+        ? 'Format tidak didukung. Pilih file CSV atau TSV.'
+        : file && !validSize
+            ? 'Ukuran file maksimal 10 MB.'
+            : '';
+    event.target.setAttribute('aria-invalid', error.textContent ? 'true' : 'false');
+});
+document.getElementById('sales-import-form').addEventListener('submit', event => {
+    const input = document.getElementById('sales-file');
+    const error = document.getElementById('file-error');
+    if (!input.files.length) error.textContent = 'Pilih file CSV atau TSV untuk diimpor.';
+    if (error.textContent) {
+        event.preventDefault();
+        input.focus();
+    }
 });
 document.getElementById('fx-amount').addEventListener('input', event => {
     const amount = Number(event.target.value);
-    document.getElementById('fx-result').textContent = `$${(amount * 1.08).toFixed(2)}`;
+    document.getElementById('fx-result').textContent = `$${((Number.isFinite(amount) ? amount : 0) * 1.08).toFixed(2)}`;
 });
 </script>
 @endpush

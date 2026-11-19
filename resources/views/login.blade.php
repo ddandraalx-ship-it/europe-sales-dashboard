@@ -201,8 +201,14 @@ const applyLanguage = language => {
     preview.textContent = toggle.dataset.transformed === 'true' ? translations[language]['clean-preview'] : translations[language]['raw-preview'];
     toggle.textContent = translations[language][toggle.dataset.transformed === 'true' ? 'show-raw' : 'preview-transform'];
 };
-document.getElementById('language').addEventListener('change', event => applyLanguage(event.target.value));
-applyLanguage(document.getElementById('language').value);
+const languageSelect = document.getElementById('language');
+const savedLanguage = localStorage.getItem('app-language');
+if (savedLanguage && translations[savedLanguage]) languageSelect.value = savedLanguage;
+languageSelect.addEventListener('change', event => {
+    localStorage.setItem('app-language', event.target.value);
+    applyLanguage(event.target.value);
+});
+applyLanguage(languageSelect.value);
 openButton.addEventListener('click', () => { modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); closeButton.focus(); });
 const closeModal = () => { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); openButton.focus(); };
 closeButton.addEventListener('click', closeModal);

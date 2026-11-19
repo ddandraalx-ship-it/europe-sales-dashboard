@@ -241,7 +241,9 @@ class DashboardController extends Controller
             * (1 + ($costChange / 100))
             * (1 + ($unitsChange / 100));
 
-        $profitNew = $revenueNew - $costNew;
+        $profitNew = $base->profit
+            + ($revenueNew - $base->revenue)
+            - ($costNew - $base->cost);
 
         $marginNew = $revenueNew > 0
             ? ($profitNew / $revenueNew) * 100

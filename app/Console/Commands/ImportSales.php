@@ -54,10 +54,48 @@ class ImportSales extends Command
         $firstLine = $file->fgets();
         $delimiter = substr_count($firstLine, "\t") > 0 ? "\t" : ',';
         $file->rewind();
+        $header = $file->fgetcsv($delimiter, '"', '\\');
+
+        if ($header === false || $header === [null]) {
+            $this->error('File kosong. Baris pertama harus berisi header 14 kolom yang diwajibkan.');
+
+            return self::FAILURE;
+        }
+
+        $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $header[0]);
+        $normalizedHeader = array_map(
+            static fn ($column) => strtolower(trim((string) $column)),
+            $header
+        );
+
+        if ($normalizedHeader !== self::COLUMNS) {
+            $missing = array_values(array_diff(self::COLUMNS, $normalizedHeader));
+            $unexpected = array_values(array_diff($normalizedHeader, self::COLUMNS));
+            $details = [];
+
+            if ($missing !== []) {
+                $details[] = 'kolom wajib yang hilang: '.implode(', ', $missing);
+            }
+
+            if ($unexpected !== []) {
+                $details[] = 'kolom tidak dikenal: '.implode(', ', array_filter($unexpected, static fn ($column) => $column !== ''));
+            }
+
+            if ($details === []) {
+                $details[] = 'urutan kolom tidak sesuai';
+            }
+
+            $this->error(
+                'Header file tidak sesuai. Urutan yang diwajibkan: '.implode(', ', self::COLUMNS)
+                .'. Masalah: '.implode('; ', $details).'.'
+            );
+
+            return self::FAILURE;
+        }
 
         $rows = [];
         $orderIds = [];
-        $lineNumber = 0;
+        $lineNumber = 1;
 
         while (! $file->eof()) {
             $values = $file->fgetcsv($delimiter, '"', '\\');
@@ -67,14 +105,8 @@ class ImportSales extends Command
                 continue;
             }
 
-            $values[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $values[0]);
-
-            if ($lineNumber === 1 && strtolower(trim($values[0])) === 'region') {
-                continue;
-            }
-
             if (count($values) !== count(self::COLUMNS)) {
-                $this->error("Baris {$lineNumber} memiliki " . count($values) . ' kolom; seharusnya 14.');
+                $this->error("Baris {$lineNumber} memiliki ".count($values).' kolom; seharusnya 14.');
 
                 return self::FAILURE;
             }
@@ -122,13 +154,52 @@ class ImportSales extends Command
                 $row[$column] = $number;
             }
 
-            $row['order_id'] = (int) $row['order_id'];
-            $row['units_sold'] = (int) $row['units_sold'];
+            foreach (['order_id', 'units_sold'] as $column) {
+                if (! preg_match('/^\d+$/D', $row[$column])) {
+                    $this->error("Kolom {$column} harus berupa bilangan bulat pada baris {$lineNumber}.");
 
-            if ($row['order_id'] <= 0 || $row['units_sold'] < 0) {
-                $this->error("Order ID atau jumlah unit tidak valid pada baris {$lineNumber}.");
+                    return self::FAILURE;
+                }
 
-                return self::FAILURE;
+                $integerText = ltrim($row[$column], '0');
+                $integerText = $integerText === '' ? '0' : $integerText;
+                $integer = filter_var($integerText, FILTER_VALIDATE_INT, [
+                    'options' => [
+                        'min_range' => $column === 'order_id' ? 1 : 0,
+                        'max_range' => $column === 'units_sold' ? 4294967295 : PHP_INT_MAX,
+                    ],
+                ]);
+
+                if ($integer === false) {
+                    $this->error("Nilai {$column} di luar batas yang didukung pada baris {$lineNumber}.");
+
+                    return self::FAILURE;
+                }
+
+                $row[$column] = $integer;
+            }
+
+            foreach (['unit_price', 'unit_cost', 'total_revenue', 'total_cost', 'total_profit'] as $column) {
+                if (! preg_match('/^-?(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/D', $row[$column])) {
+                    $this->error("Kolom {$column} harus berupa angka dengan maksimal 2 desimal pada baris {$lineNumber}.");
+
+                    return self::FAILURE;
+                }
+
+                if (in_array($column, ['unit_price', 'unit_cost', 'total_revenue', 'total_cost'], true) && (float) $row[$column] < 0) {
+                    $this->error("Kolom {$column} tidak boleh bernilai negatif pada baris {$lineNumber}.");
+
+                    return self::FAILURE;
+                }
+
+                $integerPart = ltrim(explode('.', ltrim($row[$column], '-'))[0], '0');
+                $maxIntegerDigits = in_array($column, ['unit_price', 'unit_cost'], true) ? 13 : 16;
+
+                if (strlen($integerPart) > $maxIntegerDigits) {
+                    $this->error("Nilai {$column} melebihi kapasitas kolom database pada baris {$lineNumber}.");
+
+                    return self::FAILURE;
+                }
             }
 
             if (isset($orderIds[$row['order_id']])) {
@@ -169,7 +240,7 @@ class ImportSales extends Command
             }
         });
 
-        $this->info(number_format(count($rows)) . ' transaksi berhasil diimpor ke database ' . DB::connection()->getDatabaseName() . '.');
+        $this->info(number_format(count($rows)).' transaksi berhasil diimpor ke database '.DB::connection()->getDatabaseName().'.');
 
         if ($this->option('replace')) {
             $this->line('Data lama pada tabel sales_transactions telah diganti dengan isi file yang divalidasi.');
