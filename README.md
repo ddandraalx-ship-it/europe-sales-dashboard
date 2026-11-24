@@ -40,9 +40,9 @@ Deploy menggunakan Container Runtime Vercel dengan FrankenPHP. Hubungkan reposit
 - `ADMIN_USERNAME` dan `ADMIN_PASSWORD` (kredensial login; tambahkan sebagai rahasia sebelum deploy)
 - `DB_CONNECTION=pgsql`
 - `DATABASE_URL` (connection string PostgreSQL dari provider; gunakan koneksi pooled dan SSL jika tersedia)
-- `SESSION_DRIVER=database` dan `CACHE_STORE=database`
+- `SESSION_DRIVER=database` dan `CACHE_STORE=file`
 
-Jalankan `php artisan migrate --force` sekali terhadap database production sebelum menerima traffic. Jangan menjalankan migrasi database saat container mulai; instance Vercel dapat berjalan bersamaan. File sistem container tidak persisten, jadi database production harus eksternal dan dapat diakses melalui koneksi jaringan. Paket gratis Neon memiliki batas penggunaan dan dapat scale-to-zero saat idle; cek batas terbaru di halaman harga provider.
+Jalankan `php artisan migrate --force` sekali terhadap database production sebelum menerima traffic. Jangan menjalankan migrasi database saat container mulai; instance Vercel dapat berjalan bersamaan. Sesi dan data bisnis disimpan di PostgreSQL; cache file bersifat lokal per container, sehingga batas percobaan login tidak dibagi antar-container. File sistem container tidak persisten, jadi database production harus eksternal dan dapat diakses melalui koneksi jaringan. Paket gratis Neon memiliki batas penggunaan dan dapat scale-to-zero saat idle; cek batas terbaru di halaman harga provider.
 
 ## Query PostgreSQL dashboard
 
