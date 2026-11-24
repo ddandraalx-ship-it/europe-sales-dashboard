@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\SalesDataUndo;
 use Carbon\Carbon;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -57,7 +58,7 @@ class ImportSales extends Command
         $header = $file->fgetcsv($delimiter, '"', '\\');
 
         if ($header === false || $header === [null]) {
-            $this->error('File kosong. Baris pertama harus berisi header 14 kolom yang diwajibkan.');
+            $this->error('File kosong. Total data terbaca: 0 baris; valid: 0; tidak valid: 0. Baris pertama harus berisi header 14 kolom yang diwajibkan.');
 
             return self::FAILURE;
         }
@@ -85,9 +86,20 @@ class ImportSales extends Command
                 $details[] = 'urutan kolom tidak sesuai';
             }
 
+            $totalRecords = 0;
+
+            while (! $file->eof()) {
+                $values = $file->fgetcsv($delimiter, '"', '\\');
+
+                if ($values !== false && $values !== [null] && $values !== [null, null]) {
+                    $totalRecords++;
+                }
+            }
+
             $this->error(
                 'Header file tidak sesuai. Urutan yang diwajibkan: '.implode(', ', self::COLUMNS)
-                .'. Masalah: '.implode('; ', $details).'.'
+                .'. Masalah: '.implode('; ', $details).'. Total data terbaca: '.number_format($totalRecords)
+                .' baris; valid: 0; tidak valid: '.number_format($totalRecords).'.'
             );
 
             return self::FAILURE;
@@ -95,6 +107,8 @@ class ImportSales extends Command
 
         $rows = [];
         $orderIds = [];
+        $validationErrors = [];
+        $totalRecords = 0;
         $lineNumber = 1;
 
         while (! $file->eof()) {
@@ -105,32 +119,35 @@ class ImportSales extends Command
                 continue;
             }
 
-            if (count($values) !== count(self::COLUMNS)) {
-                $this->error("Baris {$lineNumber} memiliki ".count($values).' kolom; seharusnya 14.');
+            $totalRecords++;
 
-                return self::FAILURE;
+            if (count($values) !== count(self::COLUMNS)) {
+                $validationErrors[] = "Baris {$lineNumber} memiliki ".count($values).' kolom; seharusnya 14.';
+
+                continue;
             }
 
             $row = array_combine(self::COLUMNS, array_map(
                 static fn ($value) => trim((string) $value),
                 $values
             ));
+            $rowErrors = [];
 
             foreach (['region', 'country', 'item_type', 'sales_channel', 'order_priority'] as $column) {
                 if ($row[$column] === '') {
-                    $this->error("Kolom {$column} kosong pada baris {$lineNumber}.");
-
-                    return self::FAILURE;
+                    $rowErrors[] = "Kolom {$column} kosong pada baris {$lineNumber}.";
                 }
             }
 
             foreach (['order_date', 'ship_date'] as $column) {
-                $date = Carbon::createFromFormat('!Y-m-d', $row[$column]);
+                try {
+                    $date = Carbon::createFromFormat('!Y-m-d', $row[$column]);
+                } catch (InvalidFormatException) {
+                    $date = false;
+                }
 
                 if ($date === false || $date->format('Y-m-d') !== $row[$column]) {
-                    $this->error("Format tanggal {$column} tidak valid pada baris {$lineNumber}.");
-
-                    return self::FAILURE;
+                    $rowErrors[] = "Format tanggal {$column} tidak valid pada baris {$lineNumber}.";
                 }
             }
 
@@ -146,19 +163,23 @@ class ImportSales extends Command
                 $number = str_replace([',', '$', ' ', "\u{00A0}"], '', $row[$column]);
 
                 if ($number === '' || ! is_numeric($number)) {
-                    $this->error("Nilai {$column} tidak valid pada baris {$lineNumber}.");
+                    $rowErrors[] = "Nilai {$column} tidak valid pada baris {$lineNumber}.";
 
-                    return self::FAILURE;
+                    continue;
                 }
 
                 $row[$column] = $number;
             }
 
             foreach (['order_id', 'units_sold'] as $column) {
-                if (! preg_match('/^\d+$/D', $row[$column])) {
-                    $this->error("Kolom {$column} harus berupa bilangan bulat pada baris {$lineNumber}.");
+                if (! isset($row[$column]) || ! is_numeric($row[$column])) {
+                    continue;
+                }
 
-                    return self::FAILURE;
+                if (! preg_match('/^\d+$/D', $row[$column])) {
+                    $rowErrors[] = "Kolom {$column} harus berupa bilangan bulat pada baris {$lineNumber}.";
+
+                    continue;
                 }
 
                 $integerText = ltrim($row[$column], '0');
@@ -171,49 +192,74 @@ class ImportSales extends Command
                 ]);
 
                 if ($integer === false) {
-                    $this->error("Nilai {$column} di luar batas yang didukung pada baris {$lineNumber}.");
+                    $rowErrors[] = "Nilai {$column} di luar batas yang didukung pada baris {$lineNumber}.";
 
-                    return self::FAILURE;
+                    continue;
                 }
 
                 $row[$column] = $integer;
             }
 
             foreach (['unit_price', 'unit_cost', 'total_revenue', 'total_cost', 'total_profit'] as $column) {
-                if (! preg_match('/^-?(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/D', $row[$column])) {
-                    $this->error("Kolom {$column} harus berupa angka dengan maksimal 2 desimal pada baris {$lineNumber}.");
+                if (! isset($row[$column]) || ! is_numeric($row[$column])) {
+                    continue;
+                }
 
-                    return self::FAILURE;
+                if (! preg_match('/^-?(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/D', $row[$column])) {
+                    $rowErrors[] = "Kolom {$column} harus berupa angka dengan maksimal 2 desimal pada baris {$lineNumber}.";
+
+                    continue;
                 }
 
                 if (in_array($column, ['unit_price', 'unit_cost', 'total_revenue', 'total_cost'], true) && (float) $row[$column] < 0) {
-                    $this->error("Kolom {$column} tidak boleh bernilai negatif pada baris {$lineNumber}.");
+                    $rowErrors[] = "Kolom {$column} tidak boleh bernilai negatif pada baris {$lineNumber}.";
 
-                    return self::FAILURE;
+                    continue;
                 }
 
                 $integerPart = ltrim(explode('.', ltrim($row[$column], '-'))[0], '0');
                 $maxIntegerDigits = in_array($column, ['unit_price', 'unit_cost'], true) ? 13 : 16;
 
                 if (strlen($integerPart) > $maxIntegerDigits) {
-                    $this->error("Nilai {$column} melebihi kapasitas kolom database pada baris {$lineNumber}.");
-
-                    return self::FAILURE;
+                    $rowErrors[] = "Nilai {$column} melebihi kapasitas kolom database pada baris {$lineNumber}.";
                 }
             }
 
-            if (isset($orderIds[$row['order_id']])) {
-                $this->error("Order ID duplikat {$row['order_id']} pada baris {$lineNumber}.");
+            if (isset($row['order_id']) && is_int($row['order_id'])) {
+                if (isset($orderIds[$row['order_id']])) {
+                    $rowErrors[] = "Order ID duplikat {$row['order_id']} pada baris {$lineNumber}.";
+                }
 
-                return self::FAILURE;
+                $orderIds[$row['order_id']] = true;
             }
 
-            $orderIds[$row['order_id']] = true;
-            $rows[] = $row;
+            if ($rowErrors !== []) {
+                array_push($validationErrors, ...$rowErrors);
+            } else {
+                $rows[] = $row;
+            }
+        }
+
+        if ($validationErrors !== []) {
+            $this->error(
+                'Validasi gagal. File belum siap diproses. Total data terbaca: '.number_format($totalRecords)
+                .' baris; valid: '.number_format(count($rows))
+                .'; tidak valid: '.number_format($totalRecords - count($rows)).'.'
+            );
+
+            foreach (array_slice($validationErrors, 0, 20) as $error) {
+                $this->line('- '.$error);
+            }
+
+            if (count($validationErrors) > 20) {
+                $this->line('- '.number_format(count($validationErrors) - 20).' kesalahan lainnya tidak ditampilkan.');
+            }
+
+            return self::FAILURE;
         }
 
         if ($rows === []) {
-            $this->error('File tidak memiliki transaksi yang dapat diimpor.');
+            $this->error('Total data terbaca: 0 baris. File tidak memiliki transaksi yang dapat diimpor.');
 
             return self::FAILURE;
         }
@@ -240,7 +286,12 @@ class ImportSales extends Command
             }
         });
 
-        $this->info(number_format(count($rows)).' transaksi berhasil diimpor ke database '.DB::connection()->getDatabaseName().'.');
+        $this->info(
+            'Total data terbaca: '.number_format($totalRecords)
+            .' baris; valid: '.number_format(count($rows))
+            .'; tidak valid: 0. '
+            .number_format(count($rows)).' transaksi berhasil diimpor ke database '.DB::connection()->getDatabaseName().'.'
+        );
 
         if ($this->option('replace')) {
             $this->line('Data lama pada tabel sales_transactions telah diganti dengan isi file yang divalidasi.');

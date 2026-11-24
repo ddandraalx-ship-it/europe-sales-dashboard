@@ -211,7 +211,9 @@ class ExampleTest extends TestCase
 
         $this->post('/etl/import', [
             'file' => UploadedFile::fake()->createWithContent('sales.csv', $csv),
-        ])->assertRedirect('/etl')->assertSessionHas('status');
+        ])->assertRedirect('/etl')->assertSessionHas('status', function (string $status): bool {
+            return str_contains($status, 'Total data terbaca: 1 baris; valid: 1; tidak valid: 0.');
+        });
 
         $this->assertDatabaseHas('sales_transactions', [
             'order_id' => 100000099,
@@ -240,7 +242,9 @@ class ExampleTest extends TestCase
         ])->assertRedirect('/etl')->assertSessionHasErrors('file');
 
         $this->assertDatabaseMissing('sales_transactions', ['order_id' => 100000097]);
-        $this->assertStringContainsString('Header file tidak sesuai', session('errors')->get('file')[0]);
+        $error = session('errors')->get('file')[0];
+        $this->assertStringContainsString('Header file tidak sesuai', $error);
+        $this->assertStringContainsString('Total data terbaca: 1 baris; valid: 0; tidak valid: 1.', $error);
     }
 
     public function test_etl_upload_reports_a_type_error_for_the_specific_column_and_row(): void
@@ -249,6 +253,7 @@ class ExampleTest extends TestCase
         $csv = implode("\n", [
             'region,country,item_type,sales_channel,order_priority,order_date,order_id,ship_date,units_sold,unit_price,unit_cost,total_revenue,total_cost,total_profit',
             'Europe,France,Cosmetics,Online,M,2026-01-15,100000096,2026-01-20,10,not-a-number,12,200,120,80',
+            'Europe,Germany,Household,Offline,L,2026-02-03,100000095,invalid-date,5,35.50,21.30,177.50,106.50,71.00',
         ]);
 
         $this->from('/etl')->post('/etl/import', [
@@ -256,7 +261,16 @@ class ExampleTest extends TestCase
         ])->assertRedirect('/etl')->assertSessionHasErrors('file');
 
         $this->assertDatabaseMissing('sales_transactions', ['order_id' => 100000096]);
-        $this->assertStringContainsString('Nilai unit_price tidak valid pada baris 2', session('errors')->get('file')[0]);
+        $error = session('errors')->get('file')[0];
+        $this->assertStringContainsString('Total data terbaca: 2 baris; valid: 0; tidak valid: 2.', $error);
+        $this->assertStringContainsString('Nilai unit_price tidak valid pada baris 2', $error);
+        $this->assertStringContainsString('Format tanggal ship_date tidak valid pada baris 3', $error);
+
+        $this->get('/etl')
+            ->assertOk()
+            ->assertSee('File belum siap diproses')
+            ->assertSee('Total data terbaca: 2 baris; valid: 0; tidak valid: 2.')
+            ->assertSee('Format tanggal ship_date tidak valid pada baris 3');
     }
 
     public function test_etl_template_download_contains_required_headers_and_valid_examples(): void

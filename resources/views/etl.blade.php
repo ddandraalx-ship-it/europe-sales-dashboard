@@ -13,8 +13,15 @@
 @if (session('status'))
     <div class="card mb-5 etl-success" role="status">{{ session('status') }}</div>
 @endif
-@if ($errors->any())
-    <div class="card mb-5 etl-error" role="alert">{{ $errors->first() }}</div>
+@if ($errors->any() && ! $errors->has('file'))
+    <div class="card mb-5 etl-error" role="alert">
+        <strong>File belum siap diproses. Perbaiki masalah berikut:</strong>
+        <ul class="etl-error-list">
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
 @endif
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
@@ -43,11 +50,12 @@
             @else
                 <small class="etl-field-error upload-error" id="file-error" role="alert" aria-live="polite"></small>
             @enderror
+            <p id="import-feedback" class="import-feedback" role="status" aria-live="polite"></p>
             <label class="replace-option">
                 <input type="checkbox" name="replace" value="1">
                 <span><strong>Replace existing data</strong><small>Clear current transactions only after the new file passes validation.</small></span>
             </label>
-            <button class="btn-primary mt-5" type="submit">Validate &amp; load data <span>→</span></button>
+            <button id="import-submit" class="btn-primary mt-5" type="submit">Validate &amp; load data <span>→</span></button>
         </form>
         <div class="etl-template-guide">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -142,9 +150,13 @@
 
 @push('styles')
 <style>
-.etl-success{border-color:rgba(86,214,160,.35);color:#9ce4bf;font-size:13px}
+.etl-success{border-color:rgba(86,214,160,.35);color:#9ce4bf;font-size:13px;white-space:pre-line}
 .etl-error{border-color:rgba(255,130,145,.35);color:#ff9aa6;font-size:13px}
-.upload-error{display:block;margin-top:8px}
+.etl-error-list{margin:8px 0 0;padding-left:18px;white-space:pre-line}
+.etl-error-list li+li{margin-top:5px}
+.upload-error{display:block;margin-top:8px;white-space:pre-line}
+.import-feedback{min-height:0;margin-top:0;color:#91a69c;font-size:11px}
+.import-feedback:not(:empty){margin-top:10px}
 .etl-template-guide{margin-top:19px;padding:15px;border:1px solid rgba(145,180,169,.13);border-radius:11px;background:rgba(7,15,18,.2)}
 .etl-template-guide h3{margin:0;color:#dce8e1;font-size:12px;font-weight:700}
 .etl-template-guide p{max-width:680px;margin:6px 0 0;color:#91a69c;font-size:10px;line-height:1.6}
@@ -204,6 +216,9 @@ document.getElementById('sales-file').addEventListener('change', event => {
         : file && !validSize
             ? 'Ukuran file maksimal 10 MB.'
             : '';
+    document.getElementById('import-feedback').textContent = file && !error.textContent
+        ? 'File siap dikirim untuk validasi format dan isi data.'
+        : '';
     event.target.setAttribute('aria-invalid', error.textContent ? 'true' : 'false');
 });
 document.getElementById('sales-import-form').addEventListener('submit', event => {
@@ -213,7 +228,10 @@ document.getElementById('sales-import-form').addEventListener('submit', event =>
     if (error.textContent) {
         event.preventDefault();
         input.focus();
+        return;
     }
+    document.getElementById('import-feedback').textContent = 'File sedang diunggah dan divalidasi. Data hanya dimuat jika seluruh baris valid.';
+    document.getElementById('import-submit').disabled = true;
 });
 document.getElementById('fx-amount').addEventListener('input', event => {
     const amount = Number(event.target.value);
