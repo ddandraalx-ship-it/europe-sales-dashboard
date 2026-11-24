@@ -34,6 +34,9 @@ Route::middleware('admin.auth')->group(function () {
     Route::post('/etl/import', [EtlController::class, 'import'])
         ->name('etl.import');
 
+    Route::post('/etl/preview', [EtlController::class, 'previewImport'])
+        ->name('etl.preview');
+
     Route::get('/etl/template', [EtlController::class, 'downloadTemplate'])
         ->name('etl.template');
 

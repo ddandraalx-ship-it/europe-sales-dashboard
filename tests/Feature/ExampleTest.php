@@ -229,6 +229,42 @@ class ExampleTest extends TestCase
         ]);
     }
 
+    public function test_etl_preview_reports_readiness_without_loading_records(): void
+    {
+        $this->withSession(['admin_authenticated' => true]);
+        $csv = implode("\n", [
+            'region,country,item_type,sales_channel,order_priority,order_date,order_id,ship_date,units_sold,unit_price,unit_cost,total_revenue,total_cost,total_profit',
+            'Europe,France,Cosmetics,Online,M,2026-01-15,100000098,2026-01-20,10,20,12,200,120,80',
+        ]);
+
+        $this->postJson('/etl/preview', [
+            'file' => UploadedFile::fake()->createWithContent('sales.csv', $csv),
+        ])->assertOk()
+            ->assertJsonPath('ready', true)
+            ->assertJsonPath('message', 'File siap diproses. Total data terbaca: 1 baris; valid: 1; tidak valid: 0.');
+
+        $this->assertDatabaseMissing('sales_transactions', ['order_id' => 100000098]);
+    }
+
+    public function test_etl_preview_reports_invalid_rows_without_loading_records(): void
+    {
+        $this->withSession(['admin_authenticated' => true]);
+        $csv = implode("\n", [
+            'region,country,item_type,sales_channel,order_priority,order_date,order_id,ship_date,units_sold,unit_price,unit_cost,total_revenue,total_cost,total_profit',
+            'Europe,France,Cosmetics,Online,M,2026-01-15,100000094,2026-01-20,10,not-a-number,12,200,120,80',
+        ]);
+
+        $this->postJson('/etl/preview', [
+            'file' => UploadedFile::fake()->createWithContent('invalid.csv', $csv),
+        ])->assertUnprocessable()
+            ->assertJsonPath('ready', false)
+            ->assertJsonPath('message', fn (string $message): bool => str_contains($message, 'Total data terbaca: 1 baris; valid: 0; tidak valid: 1.')
+                && str_contains($message, 'Nilai unit_price tidak valid pada baris 2')
+            );
+
+        $this->assertDatabaseMissing('sales_transactions', ['order_id' => 100000094]);
+    }
+
     public function test_etl_upload_rejects_a_mismatched_header_without_importing_rows(): void
     {
         $this->withSession(['admin_authenticated' => true]);

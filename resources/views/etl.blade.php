@@ -36,7 +36,7 @@
             <h2 class="font-bold text-slate-800">Load sales data</h2>
             <p class="text-xs text-slate-400 mt-1">Upload CSV/TSV dengan header sesuai skema transaksi; file hanya diproses setelah seluruh baris lolos validasi.</p>
         </div>
-        <form id="sales-import-form" method="POST" action="{{ route('etl.import') }}" enctype="multipart/form-data" novalidate>
+        <form id="sales-import-form" method="POST" action="{{ route('etl.import') }}" data-preview-url="{{ route('etl.preview') }}" enctype="multipart/form-data" novalidate>
             @csrf
             <label for="sales-file" class="upload-zone">
                 <span class="upload-icon">↑</span>
@@ -50,7 +50,7 @@
             @else
                 <small class="etl-field-error upload-error" id="file-error" role="alert" aria-live="polite"></small>
             @enderror
-            <p id="import-feedback" class="import-feedback" role="status" aria-live="polite"></p>
+            <p id="import-feedback" class="import-feedback" role="status" aria-live="polite" aria-busy="false"></p>
             <label class="replace-option">
                 <input type="checkbox" name="replace" value="1">
                 <span><strong>Replace existing data</strong><small>Clear current transactions only after the new file passes validation.</small></span>
@@ -152,11 +152,14 @@
 <style>
 .etl-success{border-color:rgba(86,214,160,.35);color:#9ce4bf;font-size:13px;white-space:pre-line}
 .etl-error{border-color:rgba(255,130,145,.35);color:#ff9aa6;font-size:13px}
+.btn-primary:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .etl-error-list{margin:8px 0 0;padding-left:18px;white-space:pre-line}
 .etl-error-list li+li{margin-top:5px}
 .upload-error{display:block;margin-top:8px;white-space:pre-line}
-.import-feedback{min-height:0;margin-top:0;color:#91a69c;font-size:11px}
+.import-feedback{min-height:0;margin-top:0;color:#91a69c;font-size:11px;white-space:pre-line}
 .import-feedback:not(:empty){margin-top:10px}
+.import-feedback[data-state="ready"]{color:#9ce4bf}
+.import-feedback[data-state="invalid"]{color:#ff9aa6}
 .etl-template-guide{margin-top:19px;padding:15px;border:1px solid rgba(145,180,169,.13);border-radius:11px;background:rgba(7,15,18,.2)}
 .etl-template-guide h3{margin:0;color:#dce8e1;font-size:12px;font-weight:700}
 .etl-template-guide p{max-width:680px;margin:6px 0 0;color:#91a69c;font-size:10px;line-height:1.6}
@@ -205,33 +208,97 @@
 
 @push('scripts')
 <script>
-document.getElementById('sales-file').addEventListener('change', event => {
+const importForm = document.getElementById('sales-import-form');
+const fileInput = document.getElementById('sales-file');
+const fileError = document.getElementById('file-error');
+const importFeedback = document.getElementById('import-feedback');
+const importButton = document.getElementById('import-submit');
+let previewController = null;
+let previewedFile = null;
+
+importButton.disabled = true;
+
+fileInput.addEventListener('change', async event => {
     const file = event.target.files[0];
-    const error = document.getElementById('file-error');
     const validExtension = file && /\.(csv|tsv|txt)$/i.test(file.name);
     const validSize = file && file.size <= 10 * 1024 * 1024;
     document.getElementById('file-name').textContent = file ? file.name : 'No file selected';
-    error.textContent = file && !validExtension
+    fileError.textContent = file && !validExtension
         ? 'Format tidak didukung. Pilih file CSV atau TSV.'
         : file && !validSize
             ? 'Ukuran file maksimal 10 MB.'
             : '';
-    document.getElementById('import-feedback').textContent = file && !error.textContent
-        ? 'File siap dikirim untuk validasi format dan isi data.'
-        : '';
-    event.target.setAttribute('aria-invalid', error.textContent ? 'true' : 'false');
-});
-document.getElementById('sales-import-form').addEventListener('submit', event => {
-    const input = document.getElementById('sales-file');
-    const error = document.getElementById('file-error');
-    if (!input.files.length) error.textContent = 'Pilih file CSV atau TSV untuk diimpor.';
-    if (error.textContent) {
-        event.preventDefault();
-        input.focus();
+    fileInput.setAttribute('aria-invalid', fileError.textContent ? 'true' : 'false');
+    previewedFile = null;
+    importButton.disabled = true;
+    previewController?.abort();
+    importFeedback.textContent = '';
+    importFeedback.dataset.state = '';
+    importFeedback.setAttribute('aria-busy', 'false');
+
+    if (!file || fileError.textContent) {
         return;
     }
-    document.getElementById('import-feedback').textContent = 'File sedang diunggah dan divalidasi. Data hanya dimuat jika seluruh baris valid.';
-    document.getElementById('import-submit').disabled = true;
+
+    const controller = new AbortController();
+    previewController = controller;
+    importFeedback.textContent = 'File diunggah sementara untuk menghitung baris dan memeriksa format...';
+    importFeedback.dataset.state = 'checking';
+    importFeedback.setAttribute('aria-busy', 'true');
+
+    try {
+        const response = await fetch(importForm.dataset.previewUrl, {
+            method: 'POST',
+            body: new FormData(importForm),
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+            const messages = result.errors
+                ? Object.values(result.errors).flat()
+                : [result.message || 'File gagal diperiksa.'];
+            importFeedback.textContent = messages.join('\n');
+            importFeedback.dataset.state = 'invalid';
+            return;
+        }
+
+        importFeedback.textContent = result.message;
+        importFeedback.dataset.state = result.ready ? 'ready' : 'invalid';
+        previewedFile = result.ready ? file : null;
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            importFeedback.textContent = 'Pratinjau file gagal diperiksa. Periksa koneksi lalu pilih ulang file untuk mencoba kembali.';
+            importFeedback.dataset.state = 'invalid';
+        }
+    } finally {
+        if (previewController === controller) {
+            importFeedback.setAttribute('aria-busy', 'false');
+            importButton.disabled = previewedFile !== file;
+            previewController = null;
+        }
+    }
+});
+
+importForm.addEventListener('submit', event => {
+    if (!fileInput.files.length) {
+        event.preventDefault();
+        fileError.textContent = 'Pilih file CSV atau TSV untuk diimpor.';
+        fileInput.focus();
+        return;
+    }
+    if (previewedFile !== fileInput.files[0]) {
+        event.preventDefault();
+        importFeedback.textContent = 'Tunggu sampai pemeriksaan format selesai dan file dinyatakan siap.';
+        importFeedback.dataset.state = 'invalid';
+        return;
+    }
+
+    importFeedback.textContent = 'File sedang dimuat. Database hanya diperbarui jika seluruh baris tetap lolos validasi.';
+    importFeedback.dataset.state = 'checking';
+    importFeedback.setAttribute('aria-busy', 'true');
+    importButton.disabled = true;
 });
 document.getElementById('fx-amount').addEventListener('input', event => {
     const amount = Number(event.target.value);

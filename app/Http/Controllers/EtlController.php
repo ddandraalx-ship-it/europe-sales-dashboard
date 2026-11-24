@@ -63,15 +63,7 @@ class EtlController extends Controller
 
     public function import(Request $request)
     {
-        $validated = $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,tsv,txt', 'max:10240'],
-            'replace' => ['nullable', 'boolean'],
-        ], [
-            'file.required' => 'Pilih file CSV atau TSV untuk diimpor.',
-            'file.file' => 'File yang dipilih tidak valid.',
-            'file.mimes' => 'Format tidak didukung. Gunakan file CSV atau TSV.',
-            'file.max' => 'Ukuran file maksimal 10 MB.',
-        ]);
+        $validated = $this->validatedImportFile($request);
 
         $arguments = [
             'file' => $validated['file']->getRealPath(),
@@ -86,6 +78,36 @@ class EtlController extends Controller
         }
 
         return redirect()->route('etl')->with('status', $output);
+    }
+
+    public function previewImport(Request $request)
+    {
+        $validated = $this->validatedImportFile($request);
+
+        $exitCode = Artisan::call('sales:import', [
+            'file' => $validated['file']->getRealPath(),
+            '--validate-only' => true,
+        ]);
+        $output = trim(Artisan::output());
+        $ready = $exitCode === 0;
+
+        return response()->json([
+            'ready' => $ready,
+            'message' => $output ?: 'File gagal diperiksa.',
+        ], $ready ? 200 : 422);
+    }
+
+    private function validatedImportFile(Request $request): array
+    {
+        return $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,tsv,txt', 'max:10240'],
+            'replace' => ['nullable', 'boolean'],
+        ], [
+            'file.required' => 'Pilih file CSV atau TSV untuk diimpor.',
+            'file.file' => 'File yang dipilih tidak valid.',
+            'file.mimes' => 'Format tidak didukung. Gunakan file CSV atau TSV.',
+            'file.max' => 'Ukuran file maksimal 10 MB.',
+        ]);
     }
 
     public function downloadTemplate()

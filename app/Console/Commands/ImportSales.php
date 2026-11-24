@@ -14,7 +14,8 @@ class ImportSales extends Command
 {
     protected $signature = 'sales:import
         {file : Path to a CSV or tab-separated sales data file}
-        {--replace : Replace existing sales transactions after the file passes validation}';
+        {--replace : Replace existing sales transactions after the file passes validation}
+        {--validate-only : Validate and report without modifying the database}';
 
     protected $description = 'Import sales data from CSV or tab-separated file';
 
@@ -262,6 +263,15 @@ class ImportSales extends Command
             $this->error('Total data terbaca: 0 baris. File tidak memiliki transaksi yang dapat diimpor.');
 
             return self::FAILURE;
+        }
+
+        if ($this->option('validate-only')) {
+            $this->info(
+                'File siap diproses. Total data terbaca: '.number_format($totalRecords)
+                .' baris; valid: '.number_format(count($rows)).'; tidak valid: 0.'
+            );
+
+            return self::SUCCESS;
         }
 
         $timestamp = now();
