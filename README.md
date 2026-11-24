@@ -4,9 +4,9 @@ Dashboard Laravel untuk melihat ringkasan penjualan, analisis drill-down, dan si
 
 ## Persyaratan
 
-- PHP 8.2 atau lebih baru dengan ekstensi `pdo_mysql`
+- PHP 8.2 atau lebih baru dengan ekstensi `pdo_pgsql` (atau `pdo_mysql` untuk MySQL/MariaDB)
 - Composer
-- MySQL atau MariaDB
+- PostgreSQL, MySQL, atau MariaDB
 
 ## Menjalankan aplikasi
 
@@ -25,24 +25,28 @@ Dashboard Laravel untuk melihat ringkasan penjualan, analisis drill-down, dan si
 
 5. Buka `http://127.0.0.1:8000`.
 
+Untuk pengembangan lokal, contoh `.env` memakai login `admin` / `admin`. Ganti nilai `ADMIN_USERNAME` dan `ADMIN_PASSWORD` sebelum aplikasi dapat diakses pihak lain. Di production tidak ada kredensial bawaan; kedua variabel wajib diatur sebagai rahasia.
+
 Migrasi menyiapkan tabel Laravel seperti sesi, cache, dan antrean. Migrasi juga membuat `sales_transactions` hanya jika tabel itu belum ada. Jika tabel penjualan sudah ada, migrasi membiarkannya beserta datanya tetap utuh. Tabel baru akan kosong sampai data penjualan dimasukkan.
 
 Tabel `sales_transactions` perlu memiliki kolom `region`, `country`, `item_type`, `sales_channel`, `order_priority`, `order_date`, `order_id`, `ship_date`, `units_sold`, `unit_price`, `unit_cost`, `total_revenue`, `total_cost`, dan `total_profit`.
 
 ## Deploy ke Vercel
 
-Deploy menggunakan Container Runtime Vercel dengan FrankenPHP. Hubungkan repository GitHub ke project Vercel, lalu atur environment production berikut di **Settings → Environment Variables**:
+Deploy menggunakan Container Runtime Vercel dengan FrankenPHP. Hubungkan repository GitHub ke project Vercel, lalu pasang Neon Postgres dari Vercel Marketplace atau gunakan provider PostgreSQL lain. Atur environment production berikut di **Settings → Environment Variables**:
 
 - `APP_KEY` (buat sekali dengan `php artisan key:generate --show`; simpan hanya di Vercel)
 - `APP_URL` (domain production)
-- `DB_CONNECTION=mysql`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, dan `DB_PASSWORD` untuk database MySQL yang dapat diakses dari Vercel
+- `ADMIN_USERNAME` dan `ADMIN_PASSWORD` (kredensial login; tambahkan sebagai rahasia sebelum deploy)
+- `DB_CONNECTION=pgsql`
+- `DATABASE_URL` (connection string PostgreSQL dari provider; gunakan koneksi pooled dan SSL jika tersedia)
 - `SESSION_DRIVER=database` dan `CACHE_STORE=database`
 
-Jalankan `php artisan migrate --force` sekali terhadap database production sebelum menerima traffic. Jangan menjalankan migrasi database saat container mulai; instance Vercel dapat berjalan bersamaan. File sistem container tidak persisten, jadi database production harus eksternal dan dapat diakses melalui koneksi jaringan.
+Jalankan `php artisan migrate --force` sekali terhadap database production sebelum menerima traffic. Jangan menjalankan migrasi database saat container mulai; instance Vercel dapat berjalan bersamaan. File sistem container tidak persisten, jadi database production harus eksternal dan dapat diakses melalui koneksi jaringan. Paket gratis Neon memiliki batas penggunaan dan dapat scale-to-zero saat idle; cek batas terbaru di halaman harga provider.
 
-## Query SQL dashboard
+## Query PostgreSQL dashboard
 
-Query MySQL berikut menggabungkan KPI, tren bulanan, dan ringkasan berdasarkan negara, tipe produk, serta kanal penjualan dalam satu hasil. Sesuaikan atau tambahkan kondisi `AND` di bagian `WHERE` untuk memfilter data.
+Query PostgreSQL berikut menggabungkan KPI, tren bulanan, dan ringkasan berdasarkan negara, tipe produk, serta kanal penjualan dalam satu hasil. Sesuaikan atau tambahkan kondisi `AND` di bagian `WHERE` untuk memfilter data.
 
 ```sql
 WITH filtered AS (
@@ -77,13 +81,13 @@ aggregates AS (
 
     SELECT
         'Bulanan',
-        DATE_FORMAT(order_date, '%Y-%m'),
+        TO_CHAR(order_date, 'YYYY-MM'),
         SUM(total_revenue),
         SUM(total_cost),
         SUM(total_profit),
         SUM(units_sold)
     FROM filtered
-    GROUP BY YEAR(order_date), MONTH(order_date)
+    GROUP BY TO_CHAR(order_date, 'YYYY-MM')
 
     UNION ALL
 

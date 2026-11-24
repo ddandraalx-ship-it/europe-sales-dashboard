@@ -12,7 +12,7 @@ RUN npm run build
 FROM dunglas/frankenphp:1-php8.4-bookworm AS base
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
-    && install-php-extensions intl zip pdo_mysql
+    && install-php-extensions intl zip pdo_mysql pdo_pgsql
 
 WORKDIR /app
 
@@ -50,6 +50,7 @@ ENV PORT=80 \
     APP_ENV=production \
     APP_DEBUG=false \
     LOG_CHANNEL=stderr \
+    DB_CONNECTION=pgsql \
     CACHE_STORE=database \
     SESSION_DRIVER=database \
     QUEUE_CONNECTION=sync

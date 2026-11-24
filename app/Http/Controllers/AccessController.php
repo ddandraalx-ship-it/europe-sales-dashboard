@@ -24,7 +24,16 @@ class AccessController extends Controller
             'destination' => ['required', 'in:gateway,etl'],
         ]);
 
-        if ($credentials['username'] !== 'admin' || $credentials['password'] !== 'admin') {
+        $username = config('access.username');
+        $password = config('access.password');
+
+        if (! is_string($username) || $username === '' || ! is_string($password) || $password === '') {
+            throw ValidationException::withMessages([
+                'username' => 'Akses admin belum dikonfigurasi di server.',
+            ]);
+        }
+
+        if (! hash_equals($username, $credentials['username']) || ! hash_equals($password, $credentials['password'])) {
             throw ValidationException::withMessages([
                 'username' => 'Username atau password tidak sesuai.',
             ]);

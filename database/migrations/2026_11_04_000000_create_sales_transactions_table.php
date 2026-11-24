@@ -22,7 +22,7 @@ return new class extends Migration
             $table->date('order_date')->index();
             $table->bigInteger('order_id')->unique();
             $table->date('ship_date');
-            $table->unsignedInteger('units_sold');
+            $table->bigInteger('units_sold');
             $table->decimal('unit_price', 15, 2);
             $table->decimal('unit_cost', 15, 2);
             $table->decimal('total_revenue', 18, 2);

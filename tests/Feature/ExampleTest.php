@@ -156,6 +156,8 @@ class ExampleTest extends TestCase
 
     public function test_login_opens_the_workspace_gateway_or_etl_directly(): void
     {
+        config(['access.username' => 'admin', 'access.password' => 'admin']);
+
         $this->post('/login', [
             'username' => 'admin',
             'password' => 'admin',
@@ -169,6 +171,36 @@ class ExampleTest extends TestCase
             'password' => 'admin',
             'destination' => 'etl',
         ])->assertRedirect('/etl');
+    }
+
+    public function test_login_uses_configured_credentials(): void
+    {
+        config(['access.username' => 'dashboard-admin', 'access.password' => 'test-password']);
+
+        $this->post('/login', [
+            'username' => 'admin',
+            'password' => 'admin',
+            'destination' => 'gateway',
+        ])->assertSessionHasErrors('username');
+
+        $this->post('/login', [
+            'username' => 'dashboard-admin',
+            'password' => 'test-password',
+            'destination' => 'gateway',
+        ])->assertRedirect('/access');
+    }
+
+    public function test_login_fails_clearly_when_server_credentials_are_missing(): void
+    {
+        config(['access.username' => null, 'access.password' => null]);
+
+        $this->post('/login', [
+            'username' => 'admin',
+            'password' => 'admin',
+            'destination' => 'gateway',
+        ])->assertSessionHasErrors([
+            'username' => 'Akses admin belum dikonfigurasi di server.',
+        ]);
     }
 
     public function test_protected_pages_require_admin_access(): void

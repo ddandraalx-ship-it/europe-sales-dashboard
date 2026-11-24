@@ -75,12 +75,16 @@ class DashboardController extends Controller
             ? ($kpi->profit / $kpi->revenue) * 100
             : 0;
 
-        $yearExpression = DB::connection()->getDriverName() === 'sqlite'
-            ? "CAST(strftime('%Y', order_date) AS INTEGER)"
-            : 'YEAR(order_date)';
-        $monthExpression = DB::connection()->getDriverName() === 'sqlite'
-            ? "CAST(strftime('%m', order_date) AS INTEGER)"
-            : 'MONTH(order_date)';
+        $yearExpression = match (DB::connection()->getDriverName()) {
+            'sqlite' => "CAST(strftime('%Y', order_date) AS INTEGER)",
+            'pgsql' => 'CAST(EXTRACT(YEAR FROM order_date) AS INTEGER)',
+            default => 'YEAR(order_date)',
+        };
+        $monthExpression = match (DB::connection()->getDriverName()) {
+            'sqlite' => "CAST(strftime('%m', order_date) AS INTEGER)",
+            'pgsql' => 'CAST(EXTRACT(MONTH FROM order_date) AS INTEGER)',
+            default => 'MONTH(order_date)',
+        };
 
         $trends = (clone $query)
             ->selectRaw("
