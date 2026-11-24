@@ -26,6 +26,14 @@ class ExampleTest extends TestCase
             ->assertSee('ETL Management');
     }
 
+    public function test_https_forwarded_by_vercel_is_used_for_generated_urls(): void
+    {
+        $this->withServerVariables(['HTTP_X_FORWARDED_PROTO' => 'https'])
+            ->get('/')
+            ->assertOk()
+            ->assertSee('action="https://localhost/login"', false);
+    }
+
     public function test_language_and_theme_switchers_are_available_across_workspace_pages(): void
     {
         $this->withSession(['admin_authenticated' => true]);
