@@ -29,6 +29,17 @@ Migrasi menyiapkan tabel Laravel seperti sesi, cache, dan antrean. Migrasi juga 
 
 Tabel `sales_transactions` perlu memiliki kolom `region`, `country`, `item_type`, `sales_channel`, `order_priority`, `order_date`, `order_id`, `ship_date`, `units_sold`, `unit_price`, `unit_cost`, `total_revenue`, `total_cost`, dan `total_profit`.
 
+## Deploy ke Vercel
+
+Deploy menggunakan Container Runtime Vercel dengan FrankenPHP. Hubungkan repository GitHub ke project Vercel, lalu atur environment production berikut di **Settings → Environment Variables**:
+
+- `APP_KEY` (buat sekali dengan `php artisan key:generate --show`; simpan hanya di Vercel)
+- `APP_URL` (domain production)
+- `DB_CONNECTION=mysql`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, dan `DB_PASSWORD` untuk database MySQL yang dapat diakses dari Vercel
+- `SESSION_DRIVER=database` dan `CACHE_STORE=database`
+
+Jalankan `php artisan migrate --force` sekali terhadap database production sebelum menerima traffic. Jangan menjalankan migrasi database saat container mulai; instance Vercel dapat berjalan bersamaan. File sistem container tidak persisten, jadi database production harus eksternal dan dapat diakses melalui koneksi jaringan.
+
 ## Query SQL dashboard
 
 Query MySQL berikut menggabungkan KPI, tren bulanan, dan ringkasan berdasarkan negara, tipe produk, serta kanal penjualan dalam satu hasil. Sesuaikan atau tambahkan kondisi `AND` di bagian `WHERE` untuk memfilter data.
