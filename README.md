@@ -20,10 +20,12 @@ Dashboard Laravel untuk melihat ringkasan penjualan, analisis drill-down, dan si
    php artisan key:generate
    php artisan config:clear
    php artisan migrate
-   php artisan serve
+   php artisan serve --host=127.0.0.1 --port=8000 --no-reload
    ```
 
 5. Buka `http://127.0.0.1:8000`.
+
+Perintah `composer dev` juga menjalankan server di `127.0.0.1:8000`. Gunakan `--no-reload` pada server pengembangan Windows agar konfigurasi `.env` tetap tersedia di proses PHP yang menangani request. Setelah mengubah `.env`, hentikan lalu jalankan ulang server. Jika muncul `No application encryption key has been specified`, isi key lokal sekali dengan `php artisan key:generate`; jangan mengganti `APP_KEY` yang sudah dipakai aplikasi.
 
 Untuk pengembangan lokal, contoh `.env` memakai login `admin` / `admin`. Ganti nilai `ADMIN_USERNAME` dan `ADMIN_PASSWORD` sebelum aplikasi dapat diakses pihak lain. Di production tidak ada kredensial bawaan; kedua variabel wajib diatur sebagai rahasia.
 
@@ -39,7 +41,7 @@ Deploy menggunakan Container Runtime Vercel dengan FrankenPHP. Hubungkan reposit
 - `APP_URL` (domain production)
 - `ADMIN_USERNAME` dan `ADMIN_PASSWORD` (kredensial login; tambahkan sebagai rahasia sebelum deploy)
 - `DB_CONNECTION=pgsql`
-- `DATABASE_URL` (connection string PostgreSQL dari provider; gunakan koneksi pooled dan SSL jika tersedia)
+- `DATABASE_URL` (connection string PostgreSQL; jika tidak tersedia, konfigurasi juga menerima `DATABASE_URL_UNPOOLED` dari integrasi Neon Vercel)
 - `SESSION_DRIVER=database` dan `CACHE_STORE=file`
 
 Jalankan `php artisan migrate --force` sekali terhadap database production sebelum menerima traffic. Jangan menjalankan migrasi database saat container mulai; instance Vercel dapat berjalan bersamaan. Sesi dan data bisnis disimpan di PostgreSQL; cache file bersifat lokal per container, sehingga batas percobaan login tidak dibagi antar-container. File sistem container tidak persisten, jadi database production harus eksternal dan dapat diakses melalui koneksi jaringan. Paket gratis Neon memiliki batas penggunaan dan dapat scale-to-zero saat idle; cek batas terbaru di halaman harga provider.
